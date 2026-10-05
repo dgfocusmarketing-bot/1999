@@ -1,0 +1,682 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>AR Frog Jump</title>
+
+  <!-- A-Frame WebGL Framework -->
+  <script src="https://aframe.io/releases/1.4.2/aframe.min.js"></script>
+  <!-- AR.js for WebAR Hiro Marker Tracking -->
+  <script src="https://raw.githack.com/AR-js-org/AR.js/master/aframe/build/aframe-ar.js"></script>
+  <!-- Tailwind CSS for UI styling -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- FontAwesome Icons -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+
+  <style>
+    body {
+      margin: 0;
+      overflow: hidden;
+      font-family: 'Inter', system-ui, -apple-system, sans-serif;
+      user-select: none;
+      -webkit-user-select: none;
+    }
+
+    /* Glassmorphism panel style */
+    .glass-panel {
+      background: rgba(15, 23, 42, 0.65);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      border: 1px solid rgba(255, 255, 255, 0.15);
+      box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
+    }
+
+    .glass-btn {
+      background: rgba(255, 255, 255, 0.12);
+      backdrop-filter: blur(8px);
+      border: 1px solid rgba(255, 255, 255, 0.25);
+      transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+
+    .glass-btn:active {
+      transform: scale(0.92);
+      background: rgba(255, 255, 255, 0.25);
+    }
+
+    /* Custom Pulsing Animations */
+    @keyframes pulse-glow {
+      0%, 100% { box-shadow: 0 0 15px rgba(34, 197, 94, 0.4); }
+      50% { box-shadow: 0 0 30px rgba(34, 197, 94, 0.8); }
+    }
+
+    .glow-active {
+      animation: pulse-glow 2s infinite;
+    }
+
+    /* Hide AR.js video container scrollbars */
+    .a-canvas {
+      z-index: 1 !important;
+    }
+  </style>
+</head>
+
+<body class="bg-slate-900 text-white min-h-screen">
+
+
+  <!-- Top Navigation & Marker Status Bar -->
+  <div class="fixed top-4 left-0 right-0 z-50 flex justify-between items-center px-4 max-w-lg mx-auto pointer-events-none">
+    <!-- Marker Status Badge -->
+    <div id="markerStatus" class="glass-panel px-4 py-2 rounded-full flex items-center space-x-2 text-sm font-medium transition-all duration-300 pointer-events-auto border-amber-500/40">
+      <span class="relative flex h-3 w-3">
+        <span id="statusPing" class="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75"></span>
+        <span id="statusDot" class="relative inline-flex rounded-full h-3 w-3 bg-amber-500"></span>
+      </span>
+      <span id="statusText" class="text-amber-200">🔍 กำลังค้นหา Hiro Marker...</span>
+    </div>
+
+    <!-- Help Info Modal Trigger Button -->
+    <button onclick="toggleHelpModal(true)" class="glass-panel w-10 h-10 rounded-full flex items-center justify-center text-emerald-400 hover:text-emerald-300 pointer-events-auto">
+      <i class="fas fa-question-circle text-lg"></i>
+    </button>
+  </div>
+
+  <!-- Speed Display Badge -->
+  <div class="fixed top-18 left-1/2 -translate-x-1/2 z-40 pointer-events-none">
+    <div class="glass-panel px-5 py-1.5 rounded-full text-center flex items-center gap-2 border-emerald-500/30">
+      <i class="fas fa-tachometer-alt text-emerald-400 text-xs"></i>
+      <span class="text-xs text-slate-300">ความเร็วการกระโดด:</span>
+      <span id="speedValue" class="text-sm font-bold text-emerald-400 font-mono">1.0x</span>
+    </div>
+  </div>
+
+  <!-- Bottom Interactive Control Deck -->
+  <div class="fixed bottom-6 left-0 right-0 z-50 px-4 max-w-md mx-auto">
+    <div class="glass-panel p-3.5 rounded-3xl flex flex-col gap-3 border-emerald-500/20">
+      
+      <!-- Primary Action Buttons Row -->
+      <div class="grid grid-cols-2 gap-2.5">
+        <button id="jumpBtn" onclick="triggerJumpAll()" class="glass-btn py-3 px-4 rounded-2xl flex items-center justify-center gap-2 text-emerald-300 font-semibold text-sm shadow-lg hover:bg-emerald-500/20 border-emerald-500/30">
+          <span class="text-lg">🐸</span>
+          <span>กระโดดพร้อมกัน</span>
+        </button>
+
+        <button id="mergeBtn" onclick="toggleMergeState()" class="glass-btn py-3 px-4 rounded-2xl flex items-center justify-center gap-2 text-pink-300 font-semibold text-sm shadow-lg hover:bg-pink-500/20 border-pink-500/30">
+          <span id="mergeIcon" class="text-lg">💚</span>
+          <span id="mergeText">รวมตัวกบ</span>
+        </button>
+      </div>
+
+      <!-- Speed Adjustment Row -->
+      <div class="flex items-center justify-between bg-slate-950/40 p-1.5 rounded-2xl border border-white/5">
+        <button onclick="changeSpeed(-0.25)" class="glass-btn flex-1 py-2 rounded-xl flex items-center justify-center gap-1.5 text-xs text-slate-200 font-medium">
+          <span>🐢</span>
+          <span>ช้าลง</span>
+        </button>
+
+        <div class="px-3 text-xs text-slate-400 font-mono">
+          <span id="speedMultiplierText">1.0</span>x
+        </div>
+
+        <button onclick="changeSpeed(0.25)" class="glass-btn flex-1 py-2 rounded-xl flex items-center justify-center gap-1.5 text-xs text-slate-200 font-medium">
+          <span>🐇</span>
+          <span>เร็วขึ้น</span>
+        </button>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- Instructions Modal -->
+  <div id="helpModal" class="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-md flex items-center justify-center p-4 transition-opacity duration-300">
+    <div class="glass-panel max-w-sm w-full p-6 rounded-3xl border-emerald-500/30 text-center relative">
+      <button onclick="toggleHelpModal(false)" class="absolute top-4 right-4 text-slate-400 hover:text-white">
+        <i class="fas fa-times text-xl"></i>
+      </button>
+
+      <div class="w-16 h-16 bg-emerald-500/20 rounded-2xl flex items-center justify-center mx-auto mb-4 border border-emerald-500/40 text-3xl">
+        🐸
+      </div>
+
+      <h3 class="text-xl font-bold text-emerald-300 mb-2">วิธีใช้งาน AR Frog Jump</h3>
+      <p class="text-xs text-slate-300 mb-4 leading-relaxed">
+        ส่องกล้องไปที่กล่อง <strong class="text-emerald-400">Hiro Marker</strong> เพื่อเรียกเหล่าน้องกบออกมาทำกิจกรรมสุดน่ารัก!
+      </p>
+
+      <div class="space-y-2.5 text-left text-xs text-slate-300 mb-6 bg-slate-900/60 p-3.5 rounded-2xl border border-white/5">
+        <div class="flex items-center gap-2.5">
+          <span class="text-base">📷</span>
+          <span>ส่องกล้องไปที่รูป Hiro Marker</span>
+        </div>
+        <div class="flex items-center gap-2.5">
+          <span class="text-base">🐸</span>
+          <span>กดปุ่มกระโดดพร้อมกันเพื่อสั่งกบเด้งตัว</span>
+        </div>
+        <div class="flex items-center gap-2.5">
+          <span class="text-base">💚</span>
+          <span>กดปุ่มรวมร่าง เพื่อแปลงร่างเป็นกบยักษ์!</span>
+        </div>
+        <div class="flex items-center gap-2.5">
+          <span class="text-base">⚡</span>
+          <span>ปรับระดับความเร็วได้ตั้งแต่ 0.25x - 3.0x</span>
+        </div>
+      </div>
+
+      <a href="https://raw.githubusercontent.com/AR-js-org/AR.js/master/data/images/HIRO.jpg" target="_blank" class="block w-full py-2.5 mb-3 bg-slate-800 hover:bg-slate-700 text-emerald-400 rounded-xl text-xs font-semibold border border-emerald-500/30">
+        <i class="fas fa-qrcode mr-1.5"></i> ดาวน์โหลด / ดู Hiro Marker
+      </a>
+
+      <button onclick="toggleHelpModal(false); initAudioContext();" class="w-full py-3 bg-emerald-500 hover:bg-emerald-600 text-slate-950 rounded-xl font-bold text-sm shadow-lg shadow-emerald-500/20">
+        เริ่มเลย! 🚀
+      </button>
+    </div>
+  </div>
+
+  <script>
+    /* =========================================================================
+       1. WEB AUDIO SYNTHESIZER FOR SOUND EFFECTS (Offline Friendly)
+       ========================================================================= */
+    let audioCtx = null;
+
+    function initAudioContext() {
+      if (!audioCtx) {
+        audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+      }
+      if (audioCtx.state === 'suspended') {
+        audioCtx.resume();
+      }
+    }
+
+    // Play synthesized frog jump sound
+    function playJumpSound(pitch = 1) {
+      if (!audioCtx) return;
+      try {
+        const osc = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+
+        osc.type = 'sine';
+        const now = audioCtx.currentTime;
+        
+        osc.frequency.setValueAtTime(150 * pitch, now);
+        osc.frequency.exponentialRampToValueAtTime(400 * pitch, now + 0.15);
+
+        gain.gain.setValueAtTime(0.3, now);
+        gain.gain.exponentialRampToValueAtTime(0.01, now + 0.2);
+
+        osc.connect(gain);
+        gain.connect(audioCtx.destination);
+
+        osc.start(now);
+        osc.stop(now + 0.2);
+      } catch (e) { console.error(e); }
+    }
+
+    // Play synthesized ribbit / croak sound
+    function playRibbitSound(isGiant = false) {
+      if (!audioCtx) return;
+      try {
+        const now = audioCtx.currentTime;
+        const pitchMod = isGiant ? 0.4 : 1.0;
+        
+        const osc = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+
+        osc.type = 'sawtooth';
+        osc.frequency.setValueAtTime(120 * pitchMod, now);
+        osc.frequency.linearRampToValueAtTime(80 * pitchMod, now + 0.1);
+        osc.frequency.linearRampToValueAtTime(140 * pitchMod, now + 0.25);
+
+        gain.gain.setValueAtTime(0.2, now);
+        gain.gain.exponentialRampToValueAtTime(0.01, now + 0.3);
+
+        osc.connect(gain);
+        gain.connect(audioCtx.destination);
+
+        osc.start(now);
+        osc.stop(now + 0.3);
+      } catch (e) { console.error(e); }
+    }
+
+    /* =========================================================================
+       2. GLOBAL APP STATE & UI CONTROLS
+       ========================================================================= */
+    let jumpSpeedMultiplier = 1.0;
+    let isMerged = false;
+    let isMarkerVisible = false;
+
+    function toggleHelpModal(show) {
+      const modal = document.getElementById('helpModal');
+      if (show) {
+        modal.classList.remove('opacity-0', 'pointer-events-none');
+      } else {
+        modal.classList.add('opacity-0', 'pointer-events-none');
+      }
+    }
+
+    function changeSpeed(delta) {
+      initAudioContext();
+      jumpSpeedMultiplier = Math.max(0.25, Math.min(3.0, jumpSpeedMultiplier + delta));
+      document.getElementById('speedValue').innerText = `${jumpSpeedMultiplier.toFixed(2)}x`;
+      document.getElementById('speedMultiplierText').innerText = jumpSpeedMultiplier.toFixed(2);
+      
+      // Notify all frog entities of speed change
+      document.querySelectorAll('[frog]').forEach(el => {
+        if (el.components.frog) {
+          el.components.frog.updateSpeed(jumpSpeedMultiplier);
+        }
+      });
+    }
+
+    function triggerJumpAll() {
+      initAudioContext();
+      document.querySelectorAll('[frog]').forEach(el => {
+        if (el.components.frog) {
+          el.components.frog.manualJump();
+        }
+      });
+    }
+
+    function toggleMergeState() {
+      initAudioContext();
+      isMerged = !isMerged;
+
+      const mergeBtn = document.getElementById('mergeBtn');
+      const mergeText = document.getElementById('mergeText');
+      const mergeIcon = document.getElementById('mergeIcon');
+      const giantFrog = document.getElementById('giantFrog');
+      const normalFrogs = [
+        document.getElementById('frog1'),
+        document.getElementById('frog2'),
+        document.getElementById('frog3')
+      ];
+
+      if (isMerged) {
+        // Switch button state
+        mergeBtn.classList.add('bg-pink-500/30', 'border-pink-400');
+        mergeText.innerText = 'แยกตัวกบ';
+        mergeIcon.innerText = '✨';
+
+        // Animate normal frogs toward center and shrink
+        normalFrogs.forEach((frog, idx) => {
+          if (frog) {
+            frog.setAttribute('animation__merge', {
+              property: 'position',
+              to: '0 0.2 0',
+              dur: 600,
+              easing: 'easeInOutCubic'
+            });
+            frog.setAttribute('animation__scale_down', {
+              property: 'scale',
+              to: '0.001 0.001 0.001',
+              dur: 600,
+              easing: 'easeInOutCubic'
+            });
+          }
+        });
+
+        // Reveal Giant Frog with scaling animation
+        setTimeout(() => {
+          playRibbitSound(true);
+          giantFrog.setAttribute('visible', 'true');
+          giantFrog.setAttribute('animation__scale_up', {
+            property: 'scale',
+            from: '0.01 0.01 0.01',
+            to: '1.8 1.8 1.8',
+            dur: 800,
+            easing: 'easeOutElastic'
+          });
+
+          // Trigger giant jump
+          if (giantFrog.components.frog) {
+            giantFrog.components.frog.manualJump();
+          }
+        }, 500);
+
+      } else {
+        // Reset button state
+        mergeBtn.classList.remove('bg-pink-500/30', 'border-pink-400');
+        mergeText.innerText = 'รวมตัวกบ';
+        mergeIcon.innerText = '💚';
+
+        // Shrink Giant Frog
+        giantFrog.setAttribute('animation__scale_down', {
+          property: 'scale',
+          to: '0.001 0.001 0.001',
+          dur: 400,
+          easing: 'easeInCubic'
+        });
+
+        setTimeout(() => {
+          giantFrog.setAttribute('visible', 'false');
+
+          // Return normal frogs to original positions
+          const originalPositions = [
+            "-0.8 0.25 0",
+            "0 0.25 0",
+            "0.8 0.25 0"
+          ];
+
+          normalFrogs.forEach((frog, idx) => {
+            if (frog) {
+              frog.setAttribute('animation__split', {
+                property: 'position',
+                to: originalPositions[idx],
+                dur: 600,
+                easing: 'easeOutBack'
+              });
+              frog.setAttribute('animation__scale_up', {
+                property: 'scale',
+                to: '1 1 1',
+                dur: 600,
+                easing: 'easeOutBack'
+              });
+            }
+          });
+
+          playRibbitSound(false);
+        }, 350);
+      }
+    }
+
+    /* =========================================================================
+       3. A-FRAME CUSTOM COMPONENTS & LOGIC
+       ========================================================================= */
+
+    // Frog Component for Procedural Geometry & Physics-based Bounce Loops
+    AFRAME.registerComponent('frog', {
+      schema: {
+        color: { type: 'string', default: '#4ade80' },
+        bellyColor: { type: 'string', default: '#fef08a' },
+        eyeColor: { type: 'string', default: '#ffffff' },
+        isGiant: { type: 'boolean', default: false },
+        autoJumpDelay: { type: 'number', default: 0 }
+      },
+
+      init: function () {
+        this.basePosY = 0.25;
+        this.isJumping = false;
+        this.jumpTimer = null;
+
+        // Build procedural frog model using A-Frame Primitives
+        const container = document.createElement('a-entity');
+        container.classList.add('frog-body-mesh');
+
+        container.innerHTML = `
+          <!-- Main Body -->
+          <a-sphere position="0 0.25 0" radius="0.28" color="${this.data.color}" roughness="0.4"></a-sphere>
+          
+          <!-- Belly Patch -->
+          <a-sphere position="0 0.2 -0.08" radius="0.22" scale="0.9 0.8 0.5" color="${this.data.bellyColor}"></a-sphere>
+
+          <!-- Eyes Left/Right -->
+          <a-entity position="-0.14 0.48 0.12">
+            <a-sphere radius="0.09" color="${this.data.color}"></a-sphere>
+            <a-sphere radius="0.075" position="0 0 0.03" color="${this.data.eyeColor}"></a-sphere>
+            <a-sphere radius="0.035" position="0 0 0.08" color="#0f172a"></a-sphere>
+            <!-- Cute Eye Highlight -->
+            <a-sphere radius="0.012" position="-0.015 0.02 0.1" color="#ffffff"></a-sphere>
+          </a-entity>
+
+          <a-entity position="0.14 0.48 0.12">
+            <a-sphere radius="0.09" color="${this.data.color}"></a-sphere>
+            <a-sphere radius="0.075" position="0 0 0.03" color="${this.data.eyeColor}"></a-sphere>
+            <a-sphere radius="0.035" position="0 0 0.08" color="#0f172a"></a-sphere>
+            <!-- Cute Eye Highlight -->
+            <a-sphere radius="0.012" position="-0.015 0.02 0.1" color="#ffffff"></a-sphere>
+          </a-entity>
+
+          <!-- Cheek Blushes -->
+          <a-sphere position="-0.2 0.28 0.18" radius="0.04" color="#f43f5e" opacity="0.6"></a-sphere>
+          <a-sphere position="0.2 0.28 0.18" radius="0.04" color="#f43f5e" opacity="0.6"></a-sphere>
+
+          <!-- Cute Smile Mouth -->
+          <a-torus position="0 0.22 0.22" rotation="20 0 0" radius="0.06" radius-tubular="0.012" arc="140" color="#1e293b"></a-torus>
+
+          <!-- Back Legs -->
+          <a-sphere position="-0.26 0.12 -0.05" scale="1.4 0.6 0.8" rotation="0 -20 -10" color="${this.data.color}"></a-sphere>
+          <a-sphere position="0.26 0.12 -0.05" scale="1.4 0.6 0.8" rotation="0 20 10" color="${this.data.color}"></a-sphere>
+          
+          <!-- Feet Pads -->
+          <a-cylinder position="-0.28 0.03 0.08" radius="0.08" height="0.02" color="${this.data.color}"></a-cylinder>
+          <a-cylinder position="0.28 0.03 0.08" radius="0.08" height="0.02" color="${this.data.color}"></a-cylinder>
+        `;
+
+        this.el.appendChild(container);
+
+        // Start auto jump cycle after initial delay
+        setTimeout(() => {
+          this.scheduleNextJump();
+        }, this.data.autoJumpDelay);
+      },
+
+      updateSpeed: function (newSpeed) {
+        // Speed updated dynamically
+      },
+
+      scheduleNextJump: function () {
+        if (this.jumpTimer) clearTimeout(this.jumpTimer);
+
+        const baseInterval = (1800 + Math.random() * 1200) / jumpSpeedMultiplier;
+        this.jumpTimer = setTimeout(() => {
+          if (isMarkerVisible && (!isMerged || this.data.isGiant)) {
+            this.executeJump();
+          } else {
+            this.scheduleNextJump();
+          }
+        }, baseInterval);
+      },
+
+      manualJump: function () {
+        this.executeJump();
+      },
+
+      executeJump: function () {
+        if (this.isJumping) return;
+        this.isJumping = true;
+
+        const el = this.el;
+        const startPos = el.getAttribute('position');
+        const jumpHeight = this.data.isGiant ? 1.2 : 0.75;
+        const dur = 400 / jumpSpeedMultiplier;
+
+        // Play audio feed
+        if (isMarkerVisible) {
+          playJumpSound(this.data.isGiant ? 0.6 : 1.1);
+        }
+
+        // Apex Jump Animation Upward
+        el.setAttribute('animation__jump_up', {
+          property: 'position',
+          to: `${startPos.x} ${this.basePosY + jumpHeight} ${startPos.z}`,
+          dur: dur,
+          easing: 'easeOutCubic'
+        });
+
+        // Stretch body slightly during ascension
+        el.setAttribute('animation__stretch', {
+          property: 'scale',
+          to: this.data.isGiant ? '1.6 2.1 1.6' : '0.85 1.25 0.85',
+          dur: dur,
+          easing: 'easeOutCubic'
+        });
+
+        // Gravity Downward Landing
+        setTimeout(() => {
+          el.setAttribute('animation__jump_down', {
+            property: 'position',
+            to: `${startPos.x} ${this.basePosY} ${startPos.z}`,
+            dur: dur,
+            easing: 'easeInQuad'
+          });
+
+          // Squash / Landing squishy bounce effect
+          setTimeout(() => {
+            if (isMarkerVisible) {
+              playRibbitSound(this.data.isGiant);
+            }
+
+            el.setAttribute('animation__squash', {
+              property: 'scale',
+              to: this.data.isGiant ? '2.1 1.4 2.1' : '1.25 0.75 1.25',
+              dur: 150,
+              easing: 'easeOutQuad'
+            });
+
+            // Recover to normal proportions
+            setTimeout(() => {
+              el.setAttribute('animation__recover', {
+                property: 'scale',
+                to: this.data.isGiant ? '1.8 1.8 1.8' : '1 1 1',
+                dur: 200,
+                easing: 'easeOutElastic'
+              });
+
+              this.isJumping = false;
+              this.scheduleNextJump();
+            }, 150);
+
+          }, dur);
+
+        }, dur);
+      }
+    });
+
+    /* =========================================================================
+       4. AR MARKER EVENTS LISTENERS
+       ========================================================================= */
+    window.addEventListener('load', () => {
+      const marker = document.getElementById('hiroMarker');
+      const statusBadge = document.getElementById('markerStatus');
+      const statusText = document.getElementById('statusText');
+      const statusDot = document.getElementById('statusDot');
+      const statusPing = document.getElementById('statusPing');
+
+      // Marker Found Listener
+      marker.addEventListener('markerFound', () => {
+        isMarkerVisible = true;
+        initAudioContext();
+
+        // Update UI Badge to Active
+        statusBadge.classList.remove('border-amber-500/40');
+        statusBadge.classList.add('border-emerald-500/60', 'bg-emerald-950/70', 'glow-active');
+        statusDot.classList.remove('bg-amber-500');
+        statusDot.classList.add('bg-emerald-400');
+        statusPing.classList.remove('bg-amber-400');
+        statusPing.classList.add('bg-emerald-400');
+        statusText.innerText = '✨ พบบล็อก Hiro Marker แล้ว!';
+        statusText.classList.remove('text-amber-200');
+        statusText.classList.add('text-emerald-200');
+
+        // Play welcome ribbit
+        playRibbitSound(false);
+      });
+
+      // Marker Lost Listener
+      marker.addEventListener('markerLost', () => {
+        isMarkerVisible = false;
+
+        // Reset UI Badge to Searching
+        statusBadge.classList.remove('border-emerald-500/60', 'bg-emerald-950/70', 'glow-active');
+        statusBadge.classList.add('border-amber-500/40');
+        statusDot.classList.remove('bg-emerald-400');
+        statusDot.classList.add('bg-amber-500');
+        statusPing.classList.remove('bg-emerald-400');
+        statusPing.classList.add('bg-amber-400');
+        statusText.innerText = '🔍 กำลังค้นหา Hiro Marker...';
+        statusText.classList.remove('text-emerald-200');
+        statusText.classList.add('text-amber-200');
+      });
+    });
+  </script>
+
+
+  <!-- A-Frame WebAR Scene -->
+  <a-scene
+    embedded
+    arjs="sourceType: webcam; debugUIEnabled: false; detectionMode: mono_and_matrix; matrixCodeType: 3x3;"
+    renderer="logarithmicDepthBuffer: true; colorManagement: true; antialias: true;"
+    vr-mode-ui="enabled: false">
+
+    <!-- Hiro Marker Anchor Container -->
+    <a-marker
+      id="hiroMarker"
+      preset="hiro"
+      smooth="true"
+      smoothCount="10"
+      smoothTolerance="0.01"
+      smoothThreshold="5">
+
+      <!-- Stylized Water Lily Pad Base Platform -->
+      <a-entity position="0 0 0">
+        <!-- Main Lily Pad Disc -->
+        <a-cylinder
+          position="0 0.02 0"
+          radius="1.6"
+          height="0.04"
+          color="#15803d"
+          roughness="0.6">
+        </a-cylinder>
+
+        <!-- Inner Pond Water Glow -->
+        <a-ring
+          position="0 0.05 0"
+          rotation="-90 0 0"
+          radius-inner="0.1"
+          radius-outer="1.5"
+          color="#22c55e"
+          opacity="0.3">
+        </a-ring>
+
+        <!-- Cute Lotus Flower Deco -->
+        <a-entity position="0 0.08 -1.2">
+          <a-dodecahedron radius="0.12" color="#f472b6"></a-dodecahedron>
+          <a-cone position="0 0.1 0" radius-bottom="0.08" radius-top="0.01" height="0.15" color="#fbbf24"></a-cone>
+        </a-entity>
+      </a-entity>
+
+      <!-- FROG 1 (Left - Bright Green) -->
+      <a-entity
+        id="frog1"
+        position="-0.8 0.25 0"
+        frog="color: #4ade80; bellyColor: #fef08a; autoJumpDelay: 0">
+      </a-entity>
+
+      <!-- FROG 2 (Center - Emerald Green) -->
+      <a-entity
+        id="frog2"
+        position="0 0.25 0"
+        frog="color: #10b981; bellyColor: #fef9c3; autoJumpDelay: 400">
+      </a-entity>
+
+      <!-- FROG 3 (Right - Lime Mint Green) -->
+      <a-entity
+        id="frog3"
+        position="0.8 0.25 0"
+        frog="color: #84cc16; bellyColor: #fef08a; autoJumpDelay: 800">
+      </a-entity>
+
+      <!-- GIANT MEGA FROG (Hidden initially, shown when Merged) -->
+      <a-entity
+        id="giantFrog"
+        position="0 0.25 0"
+        scale="0.001 0.001 0.001"
+        visible="false"
+        frog="color: #059669; bellyColor: #fef08a; isGiant: true">
+      </a-entity>
+
+      <!-- Magical Sparkle Particles around Center -->
+      <a-entity id="particles" position="0 0.2 0">
+        <a-sphere position="-0.3 0.4 0.2" radius="0.03" color="#fef08a" animation="property: position; to: -0.3 0.8 0.2; dir: alternate; loop: true; dur: 1200"></a-sphere>
+        <a-sphere position="0.4 0.5 -0.2" radius="0.02" color="#6ee7b7" animation="property: position; to: 0.4 0.9 -0.2; dir: alternate; loop: true; dur: 900"></a-sphere>
+        <a-sphere position="0.1 0.3 0.4" radius="0.025" color="#f472b6" animation="property: position; to: 0.1 0.7 0.4; dir: alternate; loop: true; dur: 1500"></a-sphere>
+      </a-entity>
+
+    </a-marker>
+
+    <!-- AR Camera -->
+    <a-entity camera></a-entity>
+
+  </a-scene>
+
+</body>
+</html>
